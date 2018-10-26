@@ -50,8 +50,10 @@ app2 <- function(object, table, ip){
   
 }
 
-spaces.key <-"TPE3SZFC45QFGXXMEF3R"
-spaces.secret <-"kTNA5/v6368JJYt8DVj15r4txcfhBWMG7Ti8FgkGIGU"
+aws.key <- gsub(".*=","",readLines("~/creds/creds.txt")[1])
+aws.secret <- gsub(".*=","",readLines("~/creds/creds.txt")[2])
+spaces.key <- gsub(".*=","",readLines("~/creds/creds.txt")[3])
+spaces.secret <- gsub(".*=","",readLines("~/creds/creds.txt")[4])
 spaces.loc <- "sgp1"
 
 #Create API node
@@ -72,8 +74,8 @@ create_api <- function(client_name){
   #                     "test14")), wait=F)
   
   system(paste0("docker-machine create --driver amazonec2 ",
-                "--amazonec2-access-key AKIAJJ2FSCN52WF4OMJA ",
-                "--amazonec2-secret-key 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 ",
+                "--amazonec2-access-key ",aws.key," ",
+                "--amazonec2-secret-key ",aws.secret," ",
                 "--amazonec2-userdata /tmp/api.yml ",
                 "--amazonec2-instance-type 't2.medium' ",
                 "--amazonec2-vpc-id vpc-32c6264a ",
