@@ -8,6 +8,8 @@ library(taucharts)
 
 options(shiny.trace = TRUE, shiny.sanitize.errors = FALSE)
 
+#######OPERATION VIEW
+
 qry2 <- function(string, ip){
   
   library(RMySQL)
@@ -50,37 +52,55 @@ app2 <- function(object, table, ip){
   
 }
 
-aws.key <- gsub(".*=","",readLines("~/creds/creds.txt")[1])
-aws.secret <- gsub(".*=","",readLines("~/creds/creds.txt")[2])
+config.file <- readLines('~/.aws/credentials')
+aws.key <- gsub(".*= ","",config.file[config.file %>% grepl("aws_access_key",.)])
+aws.secret <- gsub(".*= ","",config.file[config.file %>% grepl("aws_secret_access_key",.)])
+#aws.key <- gsub(".*=","",readLines("~/creds/creds.txt")[1])
+#aws.secret <- gsub(".*=","",readLines("~/creds/creds.txt")[2])
 spaces.key <- gsub(".*=","",readLines("~/creds/creds.txt")[3])
 spaces.secret <- gsub(".*=","",readLines("~/creds/creds.txt")[4])
 spaces.loc <- "sgp1"
+aws.loc <- "us-west-2"
 
 #Create API node
-create_api <- function(client_name){
+create_api <- function(client_name, provider){
   
+  if(provider == "do"){
   #Download API yml
   system(paste0("curl -s -LJ https://raw.githubusercontent.com/svarn-ivise/do/master/api.yml | ",
                 "sed 's|spaces.key|",spaces.key,"|' | ",
                 "sed 's|spaces.secret|",spaces.secret,"|' | ",
                 "sed 's|spaces.loc|",spaces.loc,"|' > /tmp/api.yml"), wait=F)
-  
+
+
   #Create API docker host
-  # system(trimws(paste("docker-machine -D create" ,
-  #                     "--driver digitalocean --digitalocean-access-token",do.tkn,
-  #                     "--digitalocean-userdata /tmp/api.yml",
-  #                     "--digitalocean-size s-2vcpu-4gb",
-  #                     "--digitalocean-region sgp1",
-  #                     "test14")), wait=F)
+  system(trimws(paste("docker-machine -D create" ,
+                      "--driver digitalocean --digitalocean-access-token",do.tkn,
+                      "--digitalocean-userdata /tmp/api.yml",
+                      "--digitalocean-size s-2vcpu-4gb",
+                      "--digitalocean-region sgp1",
+                      "test14")), wait=F)
   
+  } else if(provider == "aws"){
+    
+  #Download API yml
+  # system(paste0("curl -s -LJ https://raw.githubusercontent.com/svarn-ivise/do/master/aws_api.yml | ",
+  #               "sed 's|spaces.key|",aws.key,"|' | ",
+  #               "sed 's|spaces.secret|",aws.secret,"|' | ",
+  #               "sed 's|spaces.loc|",aws.loc,"|' > /tmp/aws_api.yml"), wait=F)
+  
+  system(paste0("cat ~/ops/yaml/client.yml | ",
+                  "sed 's|spaces.key|",aws.key,"|' | ",
+                  "sed 's|spaces.secret|",aws.secret,"|' | ",
+                  "sed 's|spaces.loc|",aws.loc,"|' > /tmp/aws_api.yml"), wait=F)
+    
   system(paste0("docker-machine create --driver amazonec2 ",
-                "--amazonec2-access-key ",aws.key," ",
-                "--amazonec2-secret-key ",aws.secret," ",
-                "--amazonec2-userdata /tmp/api.yml ",
+                "--amazonec2-userdata /tmp/aws_api.yml ",
                 "--amazonec2-instance-type 't2.medium' ",
                 "--amazonec2-vpc-id vpc-32c6264a ",
                 "--amazonec2-region us-west-2 ",client_name), wait=F)
   
+  }
 }
 
 #Update Model on API node
@@ -133,15 +153,17 @@ ui <- fluidPage(
       br(),
       column(width=1),
       column(width=6,
-      selectInput("selectClient","Select Client:", system("docker-machine ls --format '{{.Name}}'", inter=T)),       
+      div(style="display: inline-block;vertical-align:top;  width: 180px;",       
+        selectInput("selectClient","Select Client:", system("docker-machine ls --format '{{.Name}}'", inter=T))),       
       # dateInput("travel_date","Select Date",value = Sys.Date()),
       # numericInput("seats", "Select Remaining Seats", value = 100),
       # numericInput("searches", "Select Searches", value = 100),
     #  actionButton("submit", "Test"),br(),
     #  verbatimTextOutput("qryRes"),
-   #   fileInput("uploadDemand", "Upload Data", accept = ".csv"),
+      div(style="display: inline-block;vertical-align:top;  width: 280px;",  
+        fileInput("uploadDemand", "Upload Data:", accept = ".csv")),
     #  actionButton("refresh", "Refresh Table"),
-      HTML("<label>Bookings:</label>"),
+      br(),HTML("<label>Bookings:</label>"),
       DT::dataTableOutput("apiTable"))
     ),
     tabPanel("Booking Simulator", value="simulator",
@@ -184,7 +206,7 @@ server <- function(input,output, session){
   observeEvent(input$createAPI,{
     
     client_name <- input$clientName
-    create_api(client_name)
+    create_api(client_name ,"aws")
     
   })
   observeEvent(input$file1, {
@@ -345,7 +367,8 @@ server <- function(input,output, session){
           price = as.numeric(res[[1]]$OP),
                           load = load)
       }) %>% bind_rows()
-    }) %>% bind_rows() %>%
+    }) %>% 
+      bind_rows() %>%
       mutate(day = rep(1:days, each=sampleSize))
   
     # res %>%
@@ -355,7 +378,7 @@ server <- function(input,output, session){
     #   tau_tooltip()
     # 
   g <- res %>% ggplot(aes(x=load,y=price)) +
-    geom_point() +
+    geom_line() +
     facet_wrap(~day) +
     #geom_smooth(method='lm') +
     theme_bw() +
